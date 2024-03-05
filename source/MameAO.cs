@@ -47,7 +47,7 @@ namespace Spludlow.MameAO
         public Genre _Genre;
 
         private readonly long _DownloadDotSize = 1024 * 1024;
-
+        // Visual C 2022 Sucks up git //
         public readonly string _ListenAddress_srv = "http://+:12380/";
 
         public readonly string _ListenAddress = "http://localhost:12380/";
