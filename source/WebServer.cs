@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
@@ -7,19 +9,15 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using static Spludlow.MameAO.Reports;
-
 namespace Spludlow.MameAO
 {
-	public class WebServer
-	{
-		private MameAOProcessor _AO;
+    public class WebServer
+    {
+        private MameAOProcessor _AO;
 
-		private string _UIHTML;
+        private string _UIHTML;
 
-		private byte[] _FavIcon = Convert.FromBase64String(@"
+        private byte[] _FavIcon = Convert.FromBase64String(@"
 			AAABAAEAEBAAAAAAGABoAwAAFgAAACgAAAAQAAAAIAAAAAEAGAAAAAAAAAMAAAAAAAAAAAAAAAAA
 			AAAAAAD0tgDzuQDzsgD2xgD99NT++OP++OX++OX/+OPA67QA6t3j6KL/9tr++OP9+OX9+OX0vQD0
 			vgD99dj///T/75P/6m7/6mv/6Wz/4ne+3G4A7Obg2EL/3F7/3Vv/32v84nnysAD99+P/9MThrQCV
@@ -38,737 +36,738 @@ namespace Spludlow.MameAO
 			AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 		");
 
-		public WebServer(MameAOProcessor ao)
-		{
-			_AO = ao;
-
-			RefreshAssets();
-		}
-
-		public void RefreshAssets()
-		{
-			_UIHTML = File.ReadAllText(@"UI.html", Encoding.UTF8);
-		}
-
-		public void StartListener()
-		{
-			if (HttpListener.IsSupported == false)
-			{
-				Console.WriteLine("!!! Http Listener Is not Supported");
-				return;
-			}
-
-			HttpListener listener = new HttpListener();
-			listener.Prefixes.Add(_AO._ListenAddress);
-			listener.Start();
-
-			Task listenTask = new Task(() => {
-
-				while (true)
-				{
-					HttpListenerContext context = listener.GetContext();
-
-					context.Response.Headers.Add("Access-Control-Allow-Origin", "*");
-
-					context.Response.Headers["Content-Type"] = "application/json; charset=utf-8";
-
-					string path = context.Request.Url.AbsolutePath.ToLower();
-
-					using (StreamWriter writer = new StreamWriter(context.Response.OutputStream, new UTF8Encoding(false)))
-					{
-						try
-						{
-							if (context.Request.HttpMethod == "OPTIONS")
-							{
-								context.Response.Headers.Add("Allow", "OPTIONS, GET");
-							}
-							else
-							{
-								if (path.StartsWith("/api/") == true)
-								{
-									MethodInfo method = this.GetType().GetMethod(path.Replace("/", "_"));
-
-									if (method == null)
-									{
-										ApplicationException exception = new ApplicationException($"Not found: {path}");
-										exception.Data.Add("status", 404);
-										throw exception;
-									}
-
-									method.Invoke(this, new object[] { context, writer });
-
-								}
-								else
-								{
-									switch (path)
-									{
-										case "/favicon.ico":
-											context.Response.Headers["Content-Type"] = "image/x-icon";
-											context.Response.OutputStream.Write(_FavIcon, 0, _FavIcon.Length);
-											break;
-
-										default:
-											context.Response.Headers["Content-Type"] = "text/html; charset=utf-8";
-											writer.WriteLine(_UIHTML);
-											break;
-									}
-								}
-							}
-
-						}
-						catch (Exception e)
-						{
-							if (e is TargetInvocationException && e.InnerException != null)
-								e = e.InnerException;
-
-							ErrorResponse(context, writer, e);
-						}
-					}	
-				}
-			});
-
-			listenTask.Start();
-		}
-
-		private void ErrorResponse(HttpListenerContext context, StreamWriter writer, Exception e)
-		{
-			int status = 500;
-
-			if (e is ApplicationException)
-				status = 400;
-
-			if (e.Data["status"] != null)
-				status = (int)e.Data["status"];
-
-			context.Response.StatusCode = status;
-
-			dynamic json = new JObject();
-			
-			json.status = status;
-			json.message = e.Message;
-			json.error = e.ToString();
-
-			writer.WriteLine(json.ToString(Formatting.Indented));
-		}
-
-		public void _api_command(HttpListenerContext context, StreamWriter writer)
-		{
-			string line = context.Request.QueryString["line"];
-
-			if (line == null)
-				throw new ApplicationException("No line given.");
-
-			// Silent commands
-
-			if (line.StartsWith(".fav") == true)
-			{
-				_AO._Favorites.AddCommandLine(line);
-			}
-			else
-			{
-				Console.WriteLine();
-				Tools.ConsoleHeading(1, new string[] {
-					"Remote command recieved",
-					line,
-				});
-				Console.WriteLine();
+        public WebServer(MameAOProcessor ao)
+        {
+            _AO = ao;
+
+            RefreshAssets();
+        }
+
+        public void RefreshAssets()
+        {
+            _UIHTML = File.ReadAllText(@"UI.html", Encoding.UTF8);
+        }
+
+        public void StartListener()
+        {
+            if (HttpListener.IsSupported == false)
+            {
+                Console.WriteLine("!!! Http Listener Is not Supported");
+                return;
+            }
+
+            HttpListener listener = new HttpListener();
+            listener.Prefixes.Add(_AO._ListenAddress_srv);
+            listener.Start();
+
+            Task listenTask = new Task(() =>
+            {
+
+                while (true)
+                {
+                    HttpListenerContext context = listener.GetContext();
+
+                    context.Response.Headers.Add("Access-Control-Allow-Origin", "*");
+
+                    context.Response.Headers["Content-Type"] = "application/json; charset=utf-8";
+
+                    string path = context.Request.Url.AbsolutePath.ToLower();
+
+                    using (StreamWriter writer = new StreamWriter(context.Response.OutputStream, new UTF8Encoding(false)))
+                    {
+                        try
+                        {
+                            if (context.Request.HttpMethod == "OPTIONS")
+                            {
+                                context.Response.Headers.Add("Allow", "OPTIONS, GET");
+                            }
+                            else
+                            {
+                                if (path.StartsWith("/api/") == true)
+                                {
+                                    MethodInfo method = this.GetType().GetMethod(path.Replace("/", "_"));
+
+                                    if (method == null)
+                                    {
+                                        ApplicationException exception = new ApplicationException($"Not found: {path}");
+                                        exception.Data.Add("status", 404);
+                                        throw exception;
+                                    }
+
+                                    method.Invoke(this, new object[] { context, writer });
+
+                                }
+                                else
+                                {
+                                    switch (path)
+                                    {
+                                        case "/favicon.ico":
+                                            context.Response.Headers["Content-Type"] = "image/x-icon";
+                                            context.Response.OutputStream.Write(_FavIcon, 0, _FavIcon.Length);
+                                            break;
+
+                                        default:
+                                            context.Response.Headers["Content-Type"] = "text/html; charset=utf-8";
+                                            writer.WriteLine(_UIHTML);
+                                            break;
+                                    }
+                                }
+                            }
+
+                        }
+                        catch (Exception e)
+                        {
+                            if (e is TargetInvocationException && e.InnerException != null)
+                                e = e.InnerException;
+
+                            ErrorResponse(context, writer, e);
+                        }
+                    }
+                }
+            });
+
+            listenTask.Start();
+        }
+
+        private void ErrorResponse(HttpListenerContext context, StreamWriter writer, Exception e)
+        {
+            int status = 500;
+
+            if (e is ApplicationException)
+                status = 400;
+
+            if (e.Data["status"] != null)
+                status = (int)e.Data["status"];
+
+            context.Response.StatusCode = status;
+
+            dynamic json = new JObject();
+
+            json.status = status;
+            json.message = e.Message;
+            json.error = e.ToString();
+
+            writer.WriteLine(json.ToString(Formatting.Indented));
+        }
+
+        public void _api_command(HttpListenerContext context, StreamWriter writer)
+        {
+            string line = context.Request.QueryString["line"];
+
+            if (line == null)
+                throw new ApplicationException("No line given.");
+
+            // Silent commands
+
+            if (line.StartsWith(".fav") == true)
+            {
+                _AO._Favorites.AddCommandLine(line);
+            }
+            else
+            {
+                Console.WriteLine();
+                Tools.ConsoleHeading(1, new string[] {
+                    "Remote command recieved",
+                    line,
+                });
+                Console.WriteLine();
 
-				bool started = _AO.RunLineTask(line);
+                bool started = _AO.RunLineTask(line);
 
-				if (started == false)
-					throw new ApplicationException("I'm busy.");
-			}
+                if (started == false)
+                    throw new ApplicationException("I'm busy.");
+            }
 
-			dynamic json = new JObject();
-			json.message = "OK";
-			json.command = line;
-			writer.WriteLine(json.ToString(Formatting.Indented));
-		}
-
-		public void _api_update(HttpListenerContext context, StreamWriter writer)
-		{
-			Console.WriteLine();
-			Tools.ConsoleHeading(1, new string[] {
-				"Remote update recieved",
-			});
-			Console.WriteLine();
+            dynamic json = new JObject();
+            json.message = "OK";
+            json.command = line;
+            writer.WriteLine(json.ToString(Formatting.Indented));
+        }
 
-			bool started = _AO.RunLineTask(".up");
+        public void _api_update(HttpListenerContext context, StreamWriter writer)
+        {
+            Console.WriteLine();
+            Tools.ConsoleHeading(1, new string[] {
+                "Remote update recieved",
+            });
+            Console.WriteLine();
 
-			writer.WriteLine(started == true ?
-				"<html>Please wait, MAME-AO update has started.<br/><br/>Check the console to see what it's doing.<br/><br/>" +
-				"The database will be re-created so give it a moment.<br/><br/>The updated Web UI will apear when finished.</html>"
+            bool started = _AO.RunLineTask(".up");
 
-				: "MAME-AO is busy. Is it already updating or running MAME? Kill all MAME-AO processes and try again.");
+            writer.WriteLine(started == true ?
+                "<html>Please wait, MAME-AO update has started.<br/><br/>Check the console to see what it's doing.<br/><br/>" +
+                "The database will be re-created so give it a moment.<br/><br/>The updated Web UI will apear when finished.</html>"
 
-			context.Response.Headers["Content-Type"] = "text/html";
-		}
+                : "MAME-AO is busy. Is it already updating or running MAME? Kill all MAME-AO processes and try again.");
 
-		public void _api_profiles(HttpListenerContext context, StreamWriter writer)
-		{
-			dynamic results = new JArray();
+            context.Response.Headers["Content-Type"] = "text/html";
+        }
 
-			foreach (Database.DataQueryProfile profile in Database.DataQueryProfiles)
-			{
-				dynamic result = new JObject();
+        public void _api_profiles(HttpListenerContext context, StreamWriter writer)
+        {
+            dynamic results = new JArray();
 
-				result.key = profile.Key;
-				result.text = profile.Text;
-				result.description = profile.Decription;
-				result.command = profile.CommandText;
+            foreach (Database.DataQueryProfile profile in Database.DataQueryProfiles)
+            {
+                dynamic result = new JObject();
 
-				results.Add(result);
-			}
+                result.key = profile.Key;
+                result.text = profile.Text;
+                result.description = profile.Decription;
+                result.command = profile.CommandText;
 
-			dynamic json = new JObject();
-			json.offset = 0;
-			json.limit = 0;
-			json.total = results.Count;
-			json.count = results.Count;
-			json.results = results;
+                results.Add(result);
+            }
 
-			writer.WriteLine(json.ToString(Formatting.Indented));
-		}
+            dynamic json = new JObject();
+            json.offset = 0;
+            json.limit = 0;
+            json.total = results.Count;
+            json.count = results.Count;
+            json.results = results;
 
-		public void _api_machines(HttpListenerContext context, StreamWriter writer)
-		{
-			string qs;
+            writer.WriteLine(json.ToString(Formatting.Indented));
+        }
 
-			int offset = 0;
-			qs = context.Request.QueryString["offset"];
-			if (qs != null)
-				offset = Int32.Parse(qs);
+        public void _api_machines(HttpListenerContext context, StreamWriter writer)
+        {
+            string qs;
 
-			int limit = 100;
-			qs = context.Request.QueryString["limit"];
-			if (qs != null)
-				limit = Int32.Parse(qs);
+            int offset = 0;
+            qs = context.Request.QueryString["offset"];
+            if (qs != null)
+                offset = Int32.Parse(qs);
 
-			if (limit > 1000)
-				throw new ApplicationException("Limit is limited to 1000");
+            int limit = 100;
+            qs = context.Request.QueryString["limit"];
+            if (qs != null)
+                limit = Int32.Parse(qs);
 
-			string search = "";
-			qs = context.Request.QueryString["search"];
-			if (qs != null)
-				search = qs.Trim();
-			if (search.Length == 0)
-				search = null;
+            if (limit > 1000)
+                throw new ApplicationException("Limit is limited to 1000");
 
-			string profile = context.Request.QueryString["profile"];
-			if (profile == null)
-				throw new ApplicationException("profile not passed");
+            string search = "";
+            qs = context.Request.QueryString["search"];
+            if (qs != null)
+                search = qs.Trim();
+            if (search.Length == 0)
+                search = null;
 
-			Database.DataQueryProfile dataQueryProfile = _AO._Database.GetDataQueryProfile(profile);
+            string profile = context.Request.QueryString["profile"];
+            if (profile == null)
+                throw new ApplicationException("profile not passed");
 
-			DataTable table = _AO._Database.QueryMachine(dataQueryProfile.Key, offset, limit, search);
+            Database.DataQueryProfile dataQueryProfile = _AO._Database.GetDataQueryProfile(profile);
 
-			JArray results = new JArray();
+            DataTable table = _AO._Database.QueryMachine(dataQueryProfile.Key, offset, limit, search);
 
-			foreach (DataRow row in table.Rows)
-			{
-				dynamic result = RowToJson(row);
+            JArray results = new JArray();
 
-				string name = (string)row["name"];
+            foreach (DataRow row in table.Rows)
+            {
+                dynamic result = RowToJson(row);
 
-				result.ao_image = $"https://mame.spludlow.co.uk/snap/machine/{name}.jpg";
+                string name = (string)row["name"];
 
-				results.Add(result);
-			}
+                result.ao_image = $"https://mame.spludlow.co.uk/snap/machine/{name}.jpg";
 
-			dynamic json = new JObject();
-			json.profile = dataQueryProfile.Key;
-			json.offset = offset;
-			json.limit = limit;
-			json.total = table.Rows.Count == 0 ? 0 : (long)table.Rows[0]["ao_total"];
-			json.count = results.Count;
-			json.results = results;
+                results.Add(result);
+            }
 
-			writer.WriteLine(json.ToString(Formatting.Indented));
-		}
+            dynamic json = new JObject();
+            json.profile = dataQueryProfile.Key;
+            json.offset = offset;
+            json.limit = limit;
+            json.total = table.Rows.Count == 0 ? 0 : (long)table.Rows[0]["ao_total"];
+            json.count = results.Count;
+            json.results = results;
 
+            writer.WriteLine(json.ToString(Formatting.Indented));
+        }
 
-		public void _api_machine(HttpListenerContext context, StreamWriter writer)
-		{
-			string qs;
 
-			string machine = null;
-			qs = context.Request.QueryString["name"];
-			if (qs != null)
-				machine = qs;
+        public void _api_machine(HttpListenerContext context, StreamWriter writer)
+        {
+            string qs;
 
-			if (machine == null)
-				throw new ApplicationException("machine not passed");
+            string machine = null;
+            qs = context.Request.QueryString["name"];
+            if (qs != null)
+                machine = qs;
 
-			DataRow machineRow = _AO._Database.GetMachine(machine);
+            if (machine == null)
+                throw new ApplicationException("machine not passed");
 
-			DataRow[] machineSoftwareListRows = _AO._Database.GetMachineSoftwareLists(machineRow);
+            DataRow machineRow = _AO._Database.GetMachine(machine);
 
-			dynamic json = RowToJson(machineRow);
+            DataRow[] machineSoftwareListRows = _AO._Database.GetMachineSoftwareLists(machineRow);
 
-			json.ao_image = $"https://mame.spludlow.co.uk/snap/machine/{machine}.jpg";
+            dynamic json = RowToJson(machineRow);
 
-			if (machineSoftwareListRows.Length > 0)
-			{
-				JArray softwarelists = new JArray();
+            json.ao_image = $"https://mame.spludlow.co.uk/snap/machine/{machine}.jpg";
 
-				foreach (DataRow row in machineSoftwareListRows)
-				{
-					dynamic softwarelist = new JObject();
+            if (machineSoftwareListRows.Length > 0)
+            {
+                JArray softwarelists = new JArray();
 
-					softwarelist.name = (string)row["name"];
-					softwarelist.description = (string)row["description"];
+                foreach (DataRow row in machineSoftwareListRows)
+                {
+                    dynamic softwarelist = new JObject();
 
-					softwarelists.Add(softwarelist);
-				}
+                    softwarelist.name = (string)row["name"];
+                    softwarelist.description = (string)row["description"];
 
-				json.softwarelists = softwarelists;
-			}
+                    softwarelists.Add(softwarelist);
+                }
 
-			writer.WriteLine(json.ToString(Formatting.Indented));
-		}
+                json.softwarelists = softwarelists;
+            }
 
+            writer.WriteLine(json.ToString(Formatting.Indented));
+        }
 
-		public void _api_software(HttpListenerContext context, StreamWriter writer)
-		{
-			string qs;
 
-			string softwarelist = null;
-			qs = context.Request.QueryString["softwarelist"];
-			if (qs != null)
-				softwarelist = qs;
+        public void _api_software(HttpListenerContext context, StreamWriter writer)
+        {
+            string qs;
 
-			if (softwarelist == null)
-				throw new ApplicationException("softwarelist not passed");
+            string softwarelist = null;
+            qs = context.Request.QueryString["softwarelist"];
+            if (qs != null)
+                softwarelist = qs;
 
-			int offset = 0;
-			qs = context.Request.QueryString["offset"];
-			if (qs != null)
-				offset = Int32.Parse(qs);
+            if (softwarelist == null)
+                throw new ApplicationException("softwarelist not passed");
 
-			int limit = 100;
-			qs = context.Request.QueryString["limit"];
-			if (qs != null)
-				limit = Int32.Parse(qs);
+            int offset = 0;
+            qs = context.Request.QueryString["offset"];
+            if (qs != null)
+                offset = Int32.Parse(qs);
 
-			if (limit > 1000)
-				throw new ApplicationException("Limit is limited to 1000");
+            int limit = 100;
+            qs = context.Request.QueryString["limit"];
+            if (qs != null)
+                limit = Int32.Parse(qs);
 
-			string search = "";
-			qs = context.Request.QueryString["search"];
-			if (qs != null)
-				search = qs.Trim();
-			if (search.Length == 0)
-				search = null;
+            if (limit > 1000)
+                throw new ApplicationException("Limit is limited to 1000");
 
-			string favorites_machine = context.Request.QueryString["favorites_machine"];
-			if (favorites_machine != null)
-				favorites_machine = favorites_machine.Trim();
+            string search = "";
+            qs = context.Request.QueryString["search"];
+            if (qs != null)
+                search = qs.Trim();
+            if (search.Length == 0)
+                search = null;
 
-			DataRow[] rows = _AO._Database.GetSoftwareListsSoftware(softwarelist, offset, limit, search, favorites_machine);
+            string favorites_machine = context.Request.QueryString["favorites_machine"];
+            if (favorites_machine != null)
+                favorites_machine = favorites_machine.Trim();
 
-			JArray results = new JArray();
+            DataRow[] rows = _AO._Database.GetSoftwareListsSoftware(softwarelist, offset, limit, search, favorites_machine);
 
-			foreach (DataRow row in rows)
-			{
-				dynamic result = RowToJson(row);
+            JArray results = new JArray();
 
-				string name = (string)row["name"];
+            foreach (DataRow row in rows)
+            {
+                dynamic result = RowToJson(row);
 
-				result.ao_image = $"https://mame.spludlow.co.uk/snap/software/{(softwarelist == "@fav" ? (string)row["softwarelist_name"] : softwarelist)}/{name}.jpg";
+                string name = (string)row["name"];
 
-				results.Add(result);
-			}
+                result.ao_image = $"https://mame.spludlow.co.uk/snap/software/{(softwarelist == "@fav" ? (string)row["softwarelist_name"] : softwarelist)}/{name}.jpg";
 
-			dynamic json = new JObject();
-			json.softwarelist = softwarelist;
-			json.offset = offset;
-			json.limit = limit;
-			json.total = rows.Length == 0 ? 0 : (long)rows[0]["ao_total"];
-			json.count = results.Count;
-			json.results = results;
+                results.Add(result);
+            }
 
-			writer.WriteLine(json.ToString(Formatting.Indented));
-		}
+            dynamic json = new JObject();
+            json.softwarelist = softwarelist;
+            json.offset = offset;
+            json.limit = limit;
+            json.total = rows.Length == 0 ? 0 : (long)rows[0]["ao_total"];
+            json.count = results.Count;
+            json.results = results;
 
-		public void _api_info(HttpListenerContext context, StreamWriter writer)
-		{
-			dynamic json = new JObject();
+            writer.WriteLine(json.ToString(Formatting.Indented));
+        }
 
-			json.time = DateTime.Now.ToString("s", System.Globalization.CultureInfo.InvariantCulture);
-			json.version = _AO._AssemblyVersion;
-			json.mame_version = _AO._Version;
-			json.directory = _AO._RootDirectory;
-			json.rom_store_count = _AO._RomHashStore.Length;
-			json.disk_store_count = _AO._DiskHashStore.Length;
-			json.genre_version = _AO._Genre.Data != null ? _AO._Genre.Version : "";
-			json.linking_enabled = _AO._LinkingEnabled;
+        public void _api_info(HttpListenerContext context, StreamWriter writer)
+        {
+            dynamic json = new JObject();
 
-			json.latest = _AO._MameAoLatest;
+            json.time = DateTime.Now.ToString("s", System.Globalization.CultureInfo.InvariantCulture);
+            json.version = _AO._AssemblyVersion;
+            json.mame_version = _AO._Version;
+            json.directory = _AO._RootDirectory;
+            json.rom_store_count = _AO._RomHashStore.Length;
+            json.disk_store_count = _AO._DiskHashStore.Length;
+            json.genre_version = _AO._Genre.Data != null ? _AO._Genre.Version : "";
+            json.linking_enabled = _AO._LinkingEnabled;
 
-			json.version_name_available = Path.GetFileNameWithoutExtension((string)_AO._MameAoLatest.assets[0].name);
-			json.version_name_current = $"mame-ao-{_AO._AssemblyVersion}";
+            json.latest = _AO._MameAoLatest;
 
-			dynamic sources = new JArray();
+            json.version_name_available = Path.GetFileNameWithoutExtension((string)_AO._MameAoLatest.assets[0].name);
+            json.version_name_current = $"mame-ao-{_AO._AssemblyVersion}";
 
-			foreach (Sources.MameSourceSet sourceSet in Sources.GetSourceSets())
-			{
-				dynamic source = new JObject();
+            dynamic sources = new JArray();
 
-				source.type = sourceSet.SetType.ToString();
-				source.list_name = sourceSet.ListName;
-				source.details = sourceSet.DetailsUrl;
-				source.metadata = sourceSet.MetadataUrl;
-				source.download = sourceSet.DownloadUrl;
-				source.html_sizes = sourceSet.HtmlSizesUrl;
-				source.file_count = sourceSet.AvailableDownloadFileInfos.Count;
-				source.title = sourceSet.Title;
-				source.version = sourceSet.Version;
+            foreach (Sources.MameSourceSet sourceSet in Sources.GetSourceSets())
+            {
+                dynamic source = new JObject();
 
-				Tools.CleanDynamic(source);
+                source.type = sourceSet.SetType.ToString();
+                source.list_name = sourceSet.ListName;
+                source.details = sourceSet.DetailsUrl;
+                source.metadata = sourceSet.MetadataUrl;
+                source.download = sourceSet.DownloadUrl;
+                source.html_sizes = sourceSet.HtmlSizesUrl;
+                source.file_count = sourceSet.AvailableDownloadFileInfos.Count;
+                source.title = sourceSet.Title;
+                source.version = sourceSet.Version;
 
-				sources.Add(source);
-			}
+                Tools.CleanDynamic(source);
 
-			json.sources = sources;
+                sources.Add(source);
+            }
 
-			writer.WriteLine(json.ToString(Formatting.Indented));
-		}
+            json.sources = sources;
 
-		public void _api_status(HttpListenerContext context, StreamWriter writer)
-		{
-			dynamic json = new JObject();
+            writer.WriteLine(json.ToString(Formatting.Indented));
+        }
 
-			string command = _AO._RunTaskCommand;
+        public void _api_status(HttpListenerContext context, StreamWriter writer)
+        {
+            dynamic json = new JObject();
 
-			json.busy = command != null;
-			json.command = command ?? "";
+            string command = _AO._RunTaskCommand;
 
-			writer.WriteLine(json.ToString(Formatting.Indented));
-		}
+            json.busy = command != null;
+            json.command = command ?? "";
 
-		public void _api_source_files(HttpListenerContext context, StreamWriter writer)
-		{
-			string qs;
+            writer.WriteLine(json.ToString(Formatting.Indented));
+        }
 
-			string type = null;
-			qs = context.Request.QueryString["type"];
-			if (qs != null)
-				type = qs;
+        public void _api_source_files(HttpListenerContext context, StreamWriter writer)
+        {
+            string qs;
 
-			if (type == null)
-				throw new ApplicationException("type not passed");
+            string type = null;
+            qs = context.Request.QueryString["type"];
+            if (qs != null)
+                type = qs;
 
-			Sources.MameSetType setType = (Sources.MameSetType)Enum.Parse(typeof(Sources.MameSetType), type);
+            if (type == null)
+                throw new ApplicationException("type not passed");
 
-			Sources.MameSourceSet[] sourceSets = Sources.GetSourceSets(setType);
+            Sources.MameSetType setType = (Sources.MameSetType)Enum.Parse(typeof(Sources.MameSetType), type);
 
-			JArray results = new JArray();
+            Sources.MameSourceSet[] sourceSets = Sources.GetSourceSets(setType);
 
-			foreach (Sources.MameSourceSet sourceSet in sourceSets)
-			{
-				dynamic source = new JObject();
-				
-				string listName = sourceSet.ListName;
-				if (listName != null)
-					source.list_name = sourceSet.ListName;
-				source.version = sourceSet.Version;
-				source.files = JArray.FromObject(sourceSet.AvailableDownloadFileInfos.Values);
+            JArray results = new JArray();
 
-				results.Add(source);
-			}
+            foreach (Sources.MameSourceSet sourceSet in sourceSets)
+            {
+                dynamic source = new JObject();
 
-			dynamic json = new JObject();
-			json.offset = 0;
-			json.limit = 0;
-			json.total = results.Count;
-			json.count = results.Count;
-			json.results = results;
+                string listName = sourceSet.ListName;
+                if (listName != null)
+                    source.list_name = sourceSet.ListName;
+                source.version = sourceSet.Version;
+                source.files = JArray.FromObject(sourceSet.AvailableDownloadFileInfos.Values);
 
-			writer.WriteLine(json.ToString(Formatting.Indented));
-		}
+                results.Add(source);
+            }
 
-		public void _api_list(HttpListenerContext context, StreamWriter writer)
-		{
-			DataTable table = Mame.ListSavedState(_AO._RootDirectory, _AO._Database);
+            dynamic json = new JObject();
+            json.offset = 0;
+            json.limit = 0;
+            json.total = results.Count;
+            json.count = results.Count;
+            json.results = results;
 
-			JArray results = new JArray();
+            writer.WriteLine(json.ToString(Formatting.Indented));
+        }
 
-			foreach (DataRow row in table.Rows)
-			{
-				dynamic result = RowToJson(row);
-				results.Add(result);
-			}
+        public void _api_list(HttpListenerContext context, StreamWriter writer)
+        {
+            DataTable table = Mame.ListSavedState(_AO._RootDirectory, _AO._Database);
 
-			dynamic json = new JObject();
-			json.offset = 0;
-			json.limit = 0;
-			json.total = table.Rows.Count;
-			json.count = results.Count;
-			json.results = results;
+            JArray results = new JArray();
 
-			writer.WriteLine(json.ToString(Formatting.Indented));
-		}
+            foreach (DataRow row in table.Rows)
+            {
+                dynamic result = RowToJson(row);
+                results.Add(result);
+            }
 
-		public void _api_reports(HttpListenerContext context, StreamWriter writer)
-		{
-			JArray results = new JArray();
+            dynamic json = new JObject();
+            json.offset = 0;
+            json.limit = 0;
+            json.total = table.Rows.Count;
+            json.count = results.Count;
+            json.results = results;
 
-			foreach (string reportName in _AO._Reports.ListReports())
-			{
-				dynamic result = new JObject();
+            writer.WriteLine(json.ToString(Formatting.Indented));
+        }
 
-				result.name = reportName;
+        public void _api_reports(HttpListenerContext context, StreamWriter writer)
+        {
+            JArray results = new JArray();
 
-				int index = reportName.IndexOf("_");
+            foreach (string reportName in _AO._Reports.ListReports())
+            {
+                dynamic result = new JObject();
 
-				if (index != -1)
-				{
-					StringBuilder dateText = new StringBuilder(reportName.Substring(0, index));
+                result.name = reportName;
 
-					dateText[13] = ':';
-					dateText[16] = ':';
+                int index = reportName.IndexOf("_");
 
-					result.date = DateTime.Parse(dateText.ToString());
-					result.description = reportName.Substring(index + 1);
+                if (index != -1)
+                {
+                    StringBuilder dateText = new StringBuilder(reportName.Substring(0, index));
 
-					results.Add(result);
-				}
+                    dateText[13] = ':';
+                    dateText[16] = ':';
 
-			}
+                    result.date = DateTime.Parse(dateText.ToString());
+                    result.description = reportName.Substring(index + 1);
 
-			dynamic json = new JObject();
-			json.offset = 0;
-			json.limit = 0;
-			json.total = results.Count;
-			json.count = results.Count;
-			json.results = results;
+                    results.Add(result);
+                }
 
-			writer.WriteLine(json.ToString(Formatting.Indented));
-		}
+            }
 
-		public void _api_report(HttpListenerContext context, StreamWriter writer)
-		{
-			string name = context.Request.QueryString["name"] ?? throw new ApplicationException("name not passed");
+            dynamic json = new JObject();
+            json.offset = 0;
+            json.limit = 0;
+            json.total = results.Count;
+            json.count = results.Count;
+            json.results = results;
 
-			string html = _AO._Reports.GetHtml(name);
+            writer.WriteLine(json.ToString(Formatting.Indented));
+        }
 
-			context.Response.Headers["Content-Type"] = "text/html";
+        public void _api_report(HttpListenerContext context, StreamWriter writer)
+        {
+            string name = context.Request.QueryString["name"] ?? throw new ApplicationException("name not passed");
 
-			writer.WriteLine(html);
-		}
+            string html = _AO._Reports.GetHtml(name);
 
-		public void _api_report_groups(HttpListenerContext context, StreamWriter writer)
-		{
-			JArray results = new JArray();
+            context.Response.Headers["Content-Type"] = "text/html";
 
-			foreach (Reports.ReportGroup reportGroup in Reports.ReportGroups)
-			{
-				dynamic group = new JObject();
+            writer.WriteLine(html);
+        }
 
-				group.key = reportGroup.Key;
-				group.text = reportGroup.Text;
-				group.description = reportGroup.Decription;
+        public void _api_report_groups(HttpListenerContext context, StreamWriter writer)
+        {
+            JArray results = new JArray();
 
-				results.Add(group);
-			}
+            foreach (Reports.ReportGroup reportGroup in Reports.ReportGroups)
+            {
+                dynamic group = new JObject();
 
-			dynamic json = new JObject();
-			json.offset = 0;
-			json.limit = 0;
-			json.total = results.Count;
-			json.count = results.Count;
-			json.results = results;
+                group.key = reportGroup.Key;
+                group.text = reportGroup.Text;
+                group.description = reportGroup.Decription;
 
-			writer.WriteLine(json.ToString(Formatting.Indented));
-		}
+                results.Add(group);
+            }
 
-		public void _api_report_types(HttpListenerContext context, StreamWriter writer)
-		{
-			string groupFilter = context.Request.QueryString["group"];
+            dynamic json = new JObject();
+            json.offset = 0;
+            json.limit = 0;
+            json.total = results.Count;
+            json.count = results.Count;
+            json.results = results;
 
-			JArray results = new JArray();
+            writer.WriteLine(json.ToString(Formatting.Indented));
+        }
 
-			foreach (Reports.ReportType reportType in Reports.ReportTypes)
-			{
-				if (groupFilter != null && groupFilter != reportType.Group)
-					continue;
+        public void _api_report_types(HttpListenerContext context, StreamWriter writer)
+        {
+            string groupFilter = context.Request.QueryString["group"];
 
-				dynamic type = new JObject();
+            JArray results = new JArray();
 
-				type.key = reportType.Key;
-				type.group = reportType.Group;
-				type.code = reportType.Code;
-				type.text = reportType.Text;
-				type.description = reportType.Decription;
+            foreach (Reports.ReportType reportType in Reports.ReportTypes)
+            {
+                if (groupFilter != null && groupFilter != reportType.Group)
+                    continue;
 
-				results.Add(type);
-			}
+                dynamic type = new JObject();
 
-			dynamic json = new JObject();
-			json.offset = 0;
-			json.limit = 0;
-			json.total = results.Count;
-			json.count = results.Count;
-			json.results = results;
+                type.key = reportType.Key;
+                type.group = reportType.Group;
+                type.code = reportType.Code;
+                type.text = reportType.Text;
+                type.description = reportType.Decription;
 
-			writer.WriteLine(json.ToString(Formatting.Indented));
-		}
+                results.Add(type);
+            }
 
-		public void _api_what(HttpListenerContext context, StreamWriter writer)
-		{
-			context.Response.Headers["Content-Type"] = "text/plain; charset=utf-8";
+            dynamic json = new JObject();
+            json.offset = 0;
+            json.limit = 0;
+            json.total = results.Count;
+            json.count = results.Count;
+            json.results = results;
 
-			writer.Write(Mame.WhatsNew(_AO._RootDirectory));
-		}
+            writer.WriteLine(json.ToString(Formatting.Indented));
+        }
 
-		public void _api_genre_groups(HttpListenerContext context, StreamWriter writer)
-		{
-			JArray results = new JArray();
+        public void _api_what(HttpListenerContext context, StreamWriter writer)
+        {
+            context.Response.Headers["Content-Type"] = "text/plain; charset=utf-8";
 
-			if (_AO._Genre.Data != null)
-			{
-				HashSet<string> keepColumnNames = new HashSet<string>(new string[] { "genre_id", "group_id" });
+            writer.Write(Mame.WhatsNew(_AO._RootDirectory));
+        }
 
-				foreach (DataRow row in _AO._Genre.Data.Tables["groups"].Rows)
-				{
-					dynamic result = RowToJson(row, keepColumnNames);
-					results.Add(result);
-				}
-			}
+        public void _api_genre_groups(HttpListenerContext context, StreamWriter writer)
+        {
+            JArray results = new JArray();
 
-			dynamic json = new JObject();
-			json.offset = 0;
-			json.limit = 0;
-			json.total = results.Count;
-			json.count = results.Count;
-			json.results = results;
+            if (_AO._Genre.Data != null)
+            {
+                HashSet<string> keepColumnNames = new HashSet<string>(new string[] { "genre_id", "group_id" });
 
-			writer.WriteLine(json.ToString(Formatting.Indented));
-		}
+                foreach (DataRow row in _AO._Genre.Data.Tables["groups"].Rows)
+                {
+                    dynamic result = RowToJson(row, keepColumnNames);
+                    results.Add(result);
+                }
+            }
 
-		public void _api_genres(HttpListenerContext context, StreamWriter writer)
-		{
-			string qs;
+            dynamic json = new JObject();
+            json.offset = 0;
+            json.limit = 0;
+            json.total = results.Count;
+            json.count = results.Count;
+            json.results = results;
 
-			long group_id = 0;
-			qs = context.Request.QueryString["group_id"];
-			if (qs != null)
-				group_id = Int64.Parse(qs);
+            writer.WriteLine(json.ToString(Formatting.Indented));
+        }
 
-			string group_name = null;
-			qs = context.Request.QueryString["group_name"];
-			if (qs != null)
-				group_name = qs;
+        public void _api_genres(HttpListenerContext context, StreamWriter writer)
+        {
+            string qs;
 
-			string genre_name = null;
-			qs = context.Request.QueryString["genre_name"];
-			if (qs != null)
-				genre_name = qs;
+            long group_id = 0;
+            qs = context.Request.QueryString["group_id"];
+            if (qs != null)
+                group_id = Int64.Parse(qs);
 
-			long genre_id = 0;
+            string group_name = null;
+            qs = context.Request.QueryString["group_name"];
+            if (qs != null)
+                group_name = qs;
 
-			JArray results = new JArray();
+            string genre_name = null;
+            qs = context.Request.QueryString["genre_name"];
+            if (qs != null)
+                genre_name = qs;
 
-			if (_AO._Genre.Data != null)
-			{
-				if (group_name != null)
-				{
-					DataRow[] rows = _AO._Genre.Data.Tables["groups"].Select($"group_name = '{group_name.Replace("'", "''")}'");
+            long genre_id = 0;
 
-					if (rows.Length == 0)
-						throw new ApplicationException($"group name not found: {group_name}");
+            JArray results = new JArray();
 
-					group_id = (long)rows[0]["group_id"];
-				}
+            if (_AO._Genre.Data != null)
+            {
+                if (group_name != null)
+                {
+                    DataRow[] rows = _AO._Genre.Data.Tables["groups"].Select($"group_name = '{group_name.Replace("'", "''")}'");
 
-				if (genre_name != null)
-				{
-					DataRow[] rows = _AO._Genre.Data.Tables["genres"].Select($"genre_name = '{genre_name.Replace("'", "''")}'");
+                    if (rows.Length == 0)
+                        throw new ApplicationException($"group name not found: {group_name}");
 
-					if (rows.Length == 0)
-						throw new ApplicationException($"genre name not found: {genre_name}");
+                    group_id = (long)rows[0]["group_id"];
+                }
 
-					genre_id = (long)rows[0]["genre_id"];
-				}
+                if (genre_name != null)
+                {
+                    DataRow[] rows = _AO._Genre.Data.Tables["genres"].Select($"genre_name = '{genre_name.Replace("'", "''")}'");
 
-				HashSet<string> keepColumnNames = new HashSet<string>(new string[] { "genre_id", "group_id" });
+                    if (rows.Length == 0)
+                        throw new ApplicationException($"genre name not found: {genre_name}");
 
-				foreach (DataRow row in _AO._Genre.Data.Tables["genres"].Rows)
-				{
-					if (group_id != 0 && (long)row["group_id"] != group_id)
-						continue;
+                    genre_id = (long)rows[0]["genre_id"];
+                }
 
-					if (genre_id != 0 && (long)row["genre_id"] != genre_id)
-						continue;
+                HashSet<string> keepColumnNames = new HashSet<string>(new string[] { "genre_id", "group_id" });
 
-					dynamic result = RowToJson(row, keepColumnNames);
-					results.Add(result);
-				}
-			}
+                foreach (DataRow row in _AO._Genre.Data.Tables["genres"].Rows)
+                {
+                    if (group_id != 0 && (long)row["group_id"] != group_id)
+                        continue;
 
-			dynamic json = new JObject();
-			json.offset = 0;
-			json.limit = 0;
-			json.total = results.Count;
-			json.count = results.Count;
-			json.results = results;
+                    if (genre_id != 0 && (long)row["genre_id"] != genre_id)
+                        continue;
 
-			writer.WriteLine(json.ToString(Formatting.Indented));
-		}
+                    dynamic result = RowToJson(row, keepColumnNames);
+                    results.Add(result);
+                }
+            }
 
+            dynamic json = new JObject();
+            json.offset = 0;
+            json.limit = 0;
+            json.total = results.Count;
+            json.count = results.Count;
+            json.results = results;
 
-		private dynamic RowToJson(DataRow row)
-		{
-			return RowToJson(row, null);
-		}
-		private dynamic RowToJson(DataRow row, HashSet<string> keepColumnNames)
-		{
-			dynamic json = new JObject();
+            writer.WriteLine(json.ToString(Formatting.Indented));
+        }
 
-			foreach (DataColumn column in row.Table.Columns)
-			{
-				if (keepColumnNames == null || keepColumnNames.Contains(column.ColumnName) == false)
-				{
-					if (column.ColumnName.EndsWith("_id") == true || column.ColumnName.EndsWith("_id1") == true)
-						continue;
-				}
 
-				if (column.ColumnName == "ao_total")
-					continue;
+        private dynamic RowToJson(DataRow row)
+        {
+            return RowToJson(row, null);
+        }
+        private dynamic RowToJson(DataRow row, HashSet<string> keepColumnNames)
+        {
+            dynamic json = new JObject();
 
-				if (row.IsNull(column.ColumnName) == true)
-					continue;
+            foreach (DataColumn column in row.Table.Columns)
+            {
+                if (keepColumnNames == null || keepColumnNames.Contains(column.ColumnName) == false)
+                {
+                    if (column.ColumnName.EndsWith("_id") == true || column.ColumnName.EndsWith("_id1") == true)
+                        continue;
+                }
 
-				switch (column.DataType.Name)
-				{
-					case "String":
-						json[column.ColumnName] = (string)row[column];
-						break;
+                if (column.ColumnName == "ao_total")
+                    continue;
 
-					case "Int64":
-						json[column.ColumnName] = (long)row[column];
-						break;
+                if (row.IsNull(column.ColumnName) == true)
+                    continue;
 
-					case "Int32":
-						json[column.ColumnName] = (int)row[column];
-						break;
+                switch (column.DataType.Name)
+                {
+                    case "String":
+                        json[column.ColumnName] = (string)row[column];
+                        break;
 
-					case "DateTime":
-						json[column.ColumnName] = ((DateTime)row[column]).ToString("s");
-						break;
+                    case "Int64":
+                        json[column.ColumnName] = (long)row[column];
+                        break;
 
-					case "Boolean":
-						json[column.ColumnName] = (bool)row[column];
-						break;
+                    case "Int32":
+                        json[column.ColumnName] = (int)row[column];
+                        break;
 
-					default:
-						throw new ApplicationException($"Unknown datatype {column.DataType.Name}");
-				}
-			}
+                    case "DateTime":
+                        json[column.ColumnName] = ((DateTime)row[column]).ToString("s");
+                        break;
 
-			return json;
-		}
+                    case "Boolean":
+                        json[column.ColumnName] = (bool)row[column];
+                        break;
 
+                    default:
+                        throw new ApplicationException($"Unknown datatype {column.DataType.Name}");
+                }
+            }
 
-	}
+            return json;
+        }
+
+
+    }
 }
